@@ -1,0 +1,110 @@
+const axios = require('axios');
+
+const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
+const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL;
+
+const fallbackDictionary = {
+  'ದೋಸೆ': 'Dosa',
+  'ಇಡ್ಲಿ': 'Idli',
+  'ಉಪ್ಪಿಟ್ಟು': 'Upma',
+  'ಸಾಂಬಾರ್': 'Sambar',
+  'ಚಟ್ನಿ': 'Chutney',
+  'ಬಜ್ಜಿ': 'Bhaji',
+  'ಪೋಹಿ': 'Poha',
+  'ಕಾಫಿ': 'Coffee',
+  'ಚಹ': 'Tea',
+  'ಸಿಹಿ': 'Sweet',
+  'ಬಾಳೆಹಣ್ಣು': 'Banana',
+  'ಮಿಸ್ಸಿ ರೊಟ್ಟಿ': 'Missi Roti'
+};
+
+const translateWithGoogle = async (text, sourceLang, targetLang) => {
+  const url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`;
+  const { data } = await axios.post(url, {
+    q: text,
+    source: sourceLang,
+    target: targetLang,
+    format: 'text'
+  });
+  return data?.data?.translations?.[0]?.translatedText || text;
+};
+
+const translateWithLibre = async (text, sourceLang, targetLang) => {
+  const { data } = await axios.post(LIBRETRANSLATE_URL, {
+    q: text,
+    source: sourceLang,
+    target: targetLang,
+    format: 'text'
+  });
+  return data?.translatedText || text;
+};
+
+const translateFromDictionary = (text) => {
+  if (!text) return text;
+  const key = text.trim();
+  if (fallbackDictionary[key]) return fallbackDictionary[key];
+
+  const lowerText = key.toLowerCase();
+  const foundEntry = Object.entries(fallbackDictionary).find(([k]) => lowerText.includes(k.toLowerCase()));
+  return foundEntry ? foundEntry[1] : text;
+};
+
+const translateToEnglish = async (text) => {
+  if (!text || !text.toString().trim()) return '';
+  const cleanText = text.toString().trim();
+
+  if (GOOGLE_TRANSLATE_API_KEY) {
+    try {
+      return await translateWithGoogle(cleanText, 'kn', 'en');
+    } catch (err) {
+      console.error('Google translation failed:', err.message);
+    }
+  }
+
+  if (LIBRETRANSLATE_URL) {
+    try {
+      return await translateWithLibre(cleanText, 'kn', 'en');
+    } catch (err) {
+      console.error('LibreTranslate failed:', err.message);
+    }
+  }
+
+  return translateFromDictionary(cleanText);
+};
+
+const translateText = async (text, sourceLang = 'en') => {
+  const results = { en: text, kn: text, hi: text };
+  const targets = ['kn', 'hi'].filter(l => l !== sourceLang);
+  if (sourceLang !== 'en') targets.push('en');
+
+  if (!LIBRETRANSLATE_URL && !GOOGLE_TRANSLATE_API_KEY) {
+    if (sourceLang !== 'en') {
+      results.en = translateFromDictionary(text);
+    }
+    return results;
+  }
+
+  for (const target of targets) {
+    try {
+      if (GOOGLE_TRANSLATE_API_KEY) {
+        const translated = await translateWithGoogle(text, sourceLang, target);
+        results[target] = translated || text;
+      } else {
+        const { data } = await axios.post(LIBRETRANSLATE_URL, {
+          q: text,
+          source: sourceLang,
+          target,
+          format: 'text'
+        });
+        results[target] = data.translatedText || text;
+      }
+    } catch (err) {
+      console.error(`Translation to ${target} failed:`, err.message);
+      results[target] = text;
+    }
+  }
+
+  return results;
+};
+
+module.exports = { translateText, translateToEnglish };
