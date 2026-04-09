@@ -1,0 +1,27 @@
+const mongoose = require('mongoose');
+
+const multiLangSchema = { en: String, kn: String, hi: String };
+
+const vendorSchema = new mongoose.Schema({
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  stall_name: multiLangSchema,
+  description: multiLangSchema,
+  cuisine_type: {
+    type: String,
+    enum: ['South Indian', 'North Indian', 'Snacks', 'Beverages', 'Sweets', 'Chinese', 'Mixed']
+  },
+  address: String,
+  opening_time: String,
+  closing_time: String,
+  days_open: [String],
+  image_url: String,
+  is_open: { type: Boolean, default: false },
+  is_active: { type: Boolean, default: false },
+  approval_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  onboarding_completed: { type: Boolean, default: false },
+  average_rating: { type: Number, default: 0 },
+  total_reviews: { type: Number, default: 0 },
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Vendor', vendorSchema);
