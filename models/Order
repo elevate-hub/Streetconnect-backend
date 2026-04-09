@@ -1,0 +1,24 @@
+const mongoose = require('mongoose');
+
+const orderSchema = new mongoose.Schema({
+  customer_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
+  vendor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
+  delivery_partner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryPartner', default: null },
+  items: [{
+    menu_item_id: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem' },
+    name: String,
+    price: Number,
+    quantity: Number
+  }],
+  status: {
+    type: String,
+    enum: ['pending', 'accepted', 'preparing', 'ready', 'picked_up', 'delivered', 'rejected'],
+    default: 'pending'
+  },
+  total_amount: Number,
+  delivery_address: String,
+  rejection_reason: String,
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Order', orderSchema);
