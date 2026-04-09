@@ -1,5 +1,3 @@
-const mongoose = require('mongoose');
-
 const multiLangSchema = { en: String, kn: String, hi: String };
 
 const vendorSchema = new mongoose.Schema({
