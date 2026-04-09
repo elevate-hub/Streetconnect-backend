@@ -1,0 +1,165 @@
+const router = require('express').Router();
+const auth = require('../middleware/auth');
+const role = require('../middleware/role');
+const Vendor = require('../models/Vendor');
+const Order = require('../models/Order');
+const Review = require('../models/Review');
+const { createNotification } = require('../utils/notify');
+
+router.use(auth, role('vendor'));
+
+router.post('/onboarding', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ user_id: req.user.id });
+    if (!vendor) return res.status(404).json({ message: 'Vendor profile not found' });
+
+    Object.assign(vendor, req.body, { onboarding_completed: true });
+    await vendor.save();
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/profile', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ user_id: req.user.id });
+    if (!vendor) return res.status(404).json({ message: 'Vendor profile not found' });
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/profile', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOneAndUpdate({ user_id: req.user.id }, req.body, { new: true });
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/toggle-open', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ user_id: req.user.id });
+    vendor.is_open = !vendor.is_open;
+    await vendor.save();
+    res.json({ is_open: vendor.is_open });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/orders', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ user_id: req.user.id });
+    const { status } = req.query;
+    const filter = { vendor_id: vendor._id };
+    if (status) filter.status = status;
+    const orders = await Order.find(filter).sort({ created_at: -1 }).populate('customer_id');
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/orders/:id/status', async (req, res) => {
+  try {
+    const { status, rejection_reason } = req.body;
+    const order = await Order.findById(req.params.id).populate('customer_id');
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    order.status = status;
+    if (rejection_reason) order.rejection_reason = rejection_reason;
+    await order.save();
+
+    const customer = await require('../models/Customer').findById(order.customer_id);
+    if (customer) {
+      const msgs = {
+        accepted: 'Your order has been accepted!',
+        preparing: 'Your order is being prepared!',
+        ready: 'Your order is ready for pickup!',
+        rejected: `Your order was rejected: ${rejection_reason || 'No reason given'}`
+      };
+      if (msgs[status]) {
+        await createNotification(customer.user_id, msgs[status], 'order_update');
+      }
+    }
+
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/reviews', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ user_id: req.user.id });
+    const reviews = await Review.find({ vendor_id: vendor._id }).sort({ created_at: -1 });
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/earnings', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ user_id: req.user.id });
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayOrders = await Order.find({
+      vendor_id: vendor._id,
+      status: 'delivered',
+      created_at: { $gte: today }
+    });
+
+    const allOrders = await Order.find({ vendor_id: vendor._id, status: 'delivered' });
+
+    res.json({
+      today: todayOrders.reduce((s, o) => s + o.total_amount, 0),
+      total: allOrders.reduce((s, o) => s + o.total_amount, 0),
+      today_count: todayOrders.length,
+      total_count: allOrders.length
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+
+// Update vendor profile (address, stall name, etc.)
+router.patch('/profile', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOneAndUpdate(
+      { user_id: req.user.id }, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Update only address (simpler endpoint)
+router.patch('/address', async (req, res) => {
+  try {
+    const { address } = req.body;
+    if (!address) return res.status(400).json({ message: 'Address is required' });
+
+    const vendor = await Vendor.findOneAndUpdate(
+      { user_id: req.user.id },
+      { address },
+      { new: true }
+    );
+    
+    if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
+    
+    res.json({ message: 'Address updated', vendor });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
