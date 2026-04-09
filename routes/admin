@@ -1,0 +1,145 @@
+const router = require('express').Router();
+const auth = require('../middleware/auth');
+const role = require('../middleware/role');
+const Vendor = require('../models/Vendor');
+const DeliveryPartner = require('../models/DeliveryPartner');
+const Order = require('../models/Order');
+const Review = require('../models/Review');
+const User = require('../models/User');
+const { createNotification } = require('../utils/notify');
+
+router.use(auth, role('admin'));
+
+router.get('/stats', async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [totalVendors, pendingVendors, todayOrders, allOrders, activeDP] = await Promise.all([
+      Vendor.countDocuments(),
+      Vendor.countDocuments({ approval_status: 'pending' }),
+      Order.countDocuments({ created_at: { $gte: today } }),
+      Order.find({ status: 'delivered' }),
+      DeliveryPartner.countDocuments({ is_available: true, approval_status: 'approved' })
+    ]);
+
+    res.json({
+      total_vendors: totalVendors,
+      pending_approvals: pendingVendors,
+      today_orders: todayOrders,
+      total_revenue: allOrders.reduce((s, o) => s + o.total_amount, 0),
+      active_delivery_partners: activeDP
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/vendors', async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status) filter.approval_status = status;
+    const vendors = await Vendor.find(filter).populate('user_id', 'name email phone');
+    res.json(vendors);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/vendors/:id/approve', async (req, res) => {
+  try {
+    const vendor = await Vendor.findByIdAndUpdate(req.params.id, { approval_status: 'approved', is_active: true }, { new: true });
+    await createNotification(vendor.user_id, 'Your vendor application has been approved!', 'approval');
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/vendors/:id/reject', async (req, res) => {
+  try {
+    const vendor = await Vendor.findByIdAndUpdate(req.params.id, { approval_status: 'rejected' }, { new: true });
+    await createNotification(vendor.user_id, `Your vendor application was rejected: ${req.body.reason || 'No reason provided'}`, 'rejection');
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/vendors/:id/deactivate', async (req, res) => {
+  try {
+    const vendor = await Vendor.findByIdAndUpdate(req.params.id, { is_active: false }, { new: true });
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/delivery', async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status) filter.approval_status = status;
+    const partners = await DeliveryPartner.find(filter).populate('user_id', 'name email phone');
+    res.json(partners);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/delivery/:id/approve', async (req, res) => {
+  try {
+    const dp = await DeliveryPartner.findByIdAndUpdate(req.params.id, { approval_status: 'approved' }, { new: true });
+    await createNotification(dp.user_id, 'Your delivery partner application has been approved!', 'approval');
+    res.json(dp);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/delivery/:id/reject', async (req, res) => {
+  try {
+    const dp = await DeliveryPartner.findByIdAndUpdate(req.params.id, { approval_status: 'rejected' }, { new: true });
+    await createNotification(dp.user_id, 'Your delivery partner application was rejected.', 'rejection');
+    res.json(dp);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/orders', async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status) filter.status = status;
+    const orders = await Order.find(filter)
+      .sort({ created_at: -1 })
+      .populate('vendor_id')
+      .populate('customer_id')
+      .populate('delivery_partner_id');
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/reviews', async (req, res) => {
+  try {
+    const reviews = await Review.find().sort({ created_at: -1 }).populate('vendor_id');
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/reviews/:id', async (req, res) => {
+  try {
+    await Review.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Review deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
