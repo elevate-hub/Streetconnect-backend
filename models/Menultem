@@ -1,0 +1,134 @@
+const mongoose = require('mongoose');
+
+const multiLangSchema = { en: String, kn: String, hi: String };
+
+const menuItemSchema = new mongoose.Schema({
+  vendor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
+  name: multiLangSchema,
+  description: multiLangSchema,
+  price: { type: Number, required: true },
+  category: String,
+  image_url: String,
+  is_available: { type: Boolean, default: true },
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('MenuItem', menuItemSchema);
+
+const mongoose = require('mongoose');
+
+const notificationSchema = new mongoose.Schema({
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  message: { type: String, required: true },
+  type: String,
+  is_read: { type: Boolean, default: false },
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Notification', notificationSchema);
+
+const mongoose = require('mongoose');
+
+const orderSchema = new mongoose.Schema({
+  customer_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
+  vendor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
+  delivery_partner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryPartner', default: null },
+  items: [{
+    menu_item_id: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem' },
+    name: String,
+    price: Number,
+    quantity: Number
+  }],
+  status: {
+    type: String,
+    enum: ['pending', 'accepted', 'preparing', 'ready', 'picked_up', 'delivered', 'rejected'],
+    default: 'pending'
+  },
+  total_amount: Number,
+  delivery_address: String,
+  rejection_reason: String,
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Order', orderSchema);
+
+const mongoose = require('mongoose');
+
+const reviewSchema = new mongoose.Schema({
+  order_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  vendor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
+  delivery_partner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryPartner' },
+  vendor_rating: { type: Number, min: 1, max: 5, required: true },
+  delivery_rating: { type: Number, min: 1, max: 5 },
+  vendor_review: String,
+  delivery_review: String,
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Review', reviewSchema);
+
+const mongoose = require('mongoose');
+
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  phone: { type: String, required: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['customer', 'vendor', 'delivery', 'admin'], required: true },
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('User', userSchema);
+
+const mongoose = require('mongoose');
+
+const multiLangSchema = { en: String, kn: String, hi: String };
+
+const vendorSchema = new mongoose.Schema({
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  stall_name: multiLangSchema,
+  description: multiLangSchema,
+  cuisine_type: {
+    type: String,
+    enum: ['South Indian', 'North Indian', 'Snacks', 'Beverages', 'Sweets', 'Chinese', 'Mixed']
+  },
+  address: String,
+  opening_time: String,
+  closing_time: String,
+  days_open: [String],
+  image_url: String,
+  is_open: { type: Boolean, default: false },
+  is_active: { type: Boolean, default: false },
+  approval_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  onboarding_completed: { type: Boolean, default: false },
+  average_rating: { type: Number, default: 0 },
+  total_reviews: { type: Number, default: 0 },
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Vendor', vendorSchema);
+
+const mongoose = require('mongoose');
+
+const customerSchema = new mongoose.Schema({
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  saved_addresses: [String],
+  favourite_vendors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Vendor' }]
+});
+
+module.exports = mongoose.model('Customer', customerSchema);
+
+const mongoose = require('mongoose');
+
+const deliveryPartnerSchema = new mongoose.Schema({
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  is_available: { type: Boolean, default: false },
+  approval_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  earnings_total: { type: Number, default: 0 },
+  deliveries_completed: { type: Number, default: 0 },
+  average_rating: { type: Number, default: 0 },
+  total_reviews: { type: Number, default: 0 }
+});
+
+module.exports = mongoose.model('DeliveryPartner', deliveryPartnerSchema);
