@@ -1,0 +1,15 @@
+const mongoose = require('mongoose');
+
+const reviewSchema = new mongoose.Schema({
+  order_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  vendor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
+  delivery_partner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryPartner' },
+  vendor_rating: { type: Number, min: 1, max: 5, required: true },
+  delivery_rating: { type: Number, min: 1, max: 5 },
+  vendor_review: String,
+  delivery_review: String,
+  created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Review', reviewSchema);
