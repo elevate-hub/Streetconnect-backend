@@ -1,0 +1,110 @@
+const router = require('express').Router();
+const auth = require('../middleware/auth');
+const role = require('../middleware/role');
+const DeliveryPartner = require('../models/DeliveryPartner');
+const Order = require('../models/Order');
+const Customer = require('../models/Customer');
+const { createNotification } = require('../utils/notify');
+
+router.use(auth, role('delivery'));
+
+router.patch('/toggle-available', async (req, res) => {
+  try {
+    const dp = await DeliveryPartner.findOne({ user_id: req.user.id });
+    dp.is_available = !dp.is_available;
+    await dp.save();
+    res.json({ is_available: dp.is_available });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/jobs', async (req, res) => {
+  try {
+    const orders = await Order.find({ delivery_partner_id: null, status: 'ready' })
+      .populate('vendor_id')
+      .sort({ created_at: -1 });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/jobs/:orderId/accept', async (req, res) => {
+  try {
+    const dp = await DeliveryPartner.findOne({ user_id: req.user.id });
+    const order = await Order.findById(req.params.orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    order.delivery_partner_id = dp._id;
+    order.status = 'picked_up';
+    await order.save();
+
+    const customer = await Customer.findById(order.customer_id);
+    await createNotification(customer.user_id, 'Your order has been picked up!', 'order_update');
+
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/orders/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const order = await Order.findById(req.params.id);
+    order.status = status;
+    await order.save();
+
+    if (status === 'delivered') {
+      const dp = await DeliveryPartner.findOne({ user_id: req.user.id });
+      dp.deliveries_completed += 1;
+      dp.earnings_total += 20;
+      await dp.save();
+
+      const customer = await Customer.findById(order.customer_id);
+      await createNotification(customer.user_id, 'Your order has been delivered! Please leave a review.', 'order_delivered');
+    }
+
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/orders', async (req, res) => {
+  try {
+    const dp = await DeliveryPartner.findOne({ user_id: req.user.id });
+    const orders = await Order.find({ delivery_partner_id: dp._id })
+      .sort({ created_at: -1 })
+      .populate('vendor_id');
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/earnings', async (req, res) => {
+  try {
+    const dp = await DeliveryPartner.findOne({ user_id: req.user.id });
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayDeliveries = await Order.find({
+      delivery_partner_id: dp._id,
+      status: 'delivered',
+      created_at: { $gte: today }
+    });
+
+    res.json({
+      today: todayDeliveries.length * 20,
+      total: dp.earnings_total,
+      deliveries_completed: dp.deliveries_completed,
+      today_count: todayDeliveries.length
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
