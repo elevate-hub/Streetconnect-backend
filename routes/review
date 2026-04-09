@@ -1,0 +1,117 @@
+const router = require('express').Router();
+const auth = require('../middleware/auth');
+const Review = require('../models/Review');
+
+router.use(auth);
+
+// Create a new review
+router.post('/', async (req, res) => {
+  try {
+    const { order_id, vendor_id, delivery_partner_id, vendor_rating, delivery_rating, vendor_review, delivery_review } = req.body;
+    const user_id = req.user.id;
+
+    // Check if review already exists for this order
+    const existingReview = await Review.findOne({ order_id, user_id });
+    if (existingReview) {
+      return res.status(400).json({ message: 'Review already submitted for this order' });
+    }
+
+    const review = new Review({
+      order_id,
+      user_id,
+      vendor_id,
+      delivery_partner_id,
+      vendor_rating,
+      delivery_rating,
+      vendor_review,
+      delivery_review
+    });
+
+    await review.save();
+    res.status(201).json(review);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get reviews for a vendor
+router.get('/vendor/:vendorId', async (req, res) => {
+  try {
+    const reviews = await Review.find({ vendor_id: req.params.vendorId })
+      .populate('user_id', 'name')
+      .sort({ created_at: -1 });
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get average rating for a vendor
+router.get('/vendor/:vendorId/average', async (req, res) => {
+  try {
+    const result = await Review.aggregate([
+      { $match: { vendor_id: require('mongoose').Types.ObjectId(req.params.vendorId) } },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$vendor_rating' },
+          totalReviews: { $sum: 1 }
+        }
+      }
+    ]);
+    if (result.length > 0) {
+      res.json({ averageRating: result[0].averageRating, totalReviews: result[0].totalReviews });
+    } else {
+      res.json({ averageRating: 0, totalReviews: 0 });
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get reviews for a delivery partner
+router.get('/delivery/:deliveryPartnerId', async (req, res) => {
+  try {
+    const reviews = await Review.find({ delivery_partner_id: req.params.deliveryPartnerId })
+      .populate('user_id', 'name')
+      .sort({ created_at: -1 });
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get average rating for a delivery partner
+router.get('/delivery/:deliveryPartnerId/average', async (req, res) => {
+  try {
+    const result = await Review.aggregate([
+      { $match: { delivery_partner_id: require('mongoose').Types.ObjectId(req.params.deliveryPartnerId) } },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$delivery_rating' },
+          totalReviews: { $sum: 1 }
+        }
+      }
+    ]);
+    if (result.length > 0) {
+      res.json({ averageRating: result[0].averageRating, totalReviews: result[0].totalReviews });
+    } else {
+      res.json({ averageRating: 0, totalReviews: 0 });
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Check if review exists for an order
+router.get('/order/:orderId', async (req, res) => {
+  try {
+    const review = await Review.findOne({ order_id: req.params.orderId, user_id: req.user.id });
+    res.json({ exists: !!review });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
