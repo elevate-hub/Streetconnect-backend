@@ -1,0 +1,15 @@
+const router = require('express').Router();
+const auth = require('../middleware/auth');
+const { translateText } = require('../utils/translate');
+
+router.post('/', auth, async (req, res) => {
+  try {
+    const { text, source_lang } = req.body;
+    const result = await translateText(text, source_lang || 'en');
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
